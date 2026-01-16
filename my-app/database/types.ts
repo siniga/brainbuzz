@@ -26,6 +26,7 @@ export interface Question {
   correct_answer: string;
   media_url?: string; // Matches API
   media_uri?: string;
+  audio_url?: string;
   explanation?: string;
 }
 

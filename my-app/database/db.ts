@@ -69,6 +69,20 @@ export const initDB = async () => {
         console.log("Migration warning (questions type): " + e);
       }
 
+      // MIGRATION for Version 4: Add audio_url to questions
+      if (currentVersion < 4) {
+        try {
+          const tableInfo = await db.getAllAsync('PRAGMA table_info(questions)');
+          const hasColumn = tableInfo.some((col: any) => col.name === 'audio_url');
+          if (!hasColumn) {
+            await db.execAsync(`ALTER TABLE questions ADD COLUMN audio_url TEXT;`);
+            console.log("Added audio_url column to questions table");
+          }
+        } catch (e) {
+          console.log("Migration warning (questions audio_url): " + e);
+        }
+      }
+
       await db.runAsync(
         'INSERT OR REPLACE INTO schema_migrations (version, applied_at) VALUES (?, ?)',
         SCHEMA_VERSION, new Date().toISOString()
@@ -151,12 +165,16 @@ export const upsertSkills = async (skills: Skill[]) => {
 export const upsertQuestions = async (questions: Question[]) => {
   const db = await openDB();
 
-  // Ensure column exists (Defensive Check)
+  // Ensure columns exist (Defensive Check)
   try {
     const tableInfo = await db.getAllAsync('PRAGMA table_info(questions)');
-    const hasColumn = tableInfo.some((col: any) => col.name === 'type');
-    if (!hasColumn) {
+    const hasTypeColumn = tableInfo.some((col: any) => col.name === 'type');
+    if (!hasTypeColumn) {
       await db.execAsync(`ALTER TABLE questions ADD COLUMN type TEXT DEFAULT 'mcq';`);
+    }
+    const hasAudioColumn = tableInfo.some((col: any) => col.name === 'audio_url');
+    if (!hasAudioColumn) {
+      await db.execAsync(`ALTER TABLE questions ADD COLUMN audio_url TEXT;`);
     }
   } catch (e) {
     console.log("Upsert column check error: " + e);
@@ -166,10 +184,11 @@ export const upsertQuestions = async (questions: Question[]) => {
     for (const q of questions) {
       await db.runAsync(
         `INSERT OR REPLACE INTO questions 
-        (id, skill_id, session_index, type, question_text, options_json, correct_answer, media_uri, explanation) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (id, skill_id, session_index, type, question_text, options_json, correct_answer, media_uri, audio_url, explanation) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         q.id, q.skill_id, q.session_number || q.session_index, q.type || 'mcq', q.question_text,
-        q.options_json, q.correct_answer, q.media_uri || q.media_url || null, q.explanation || null
+        q.options_json, q.correct_answer, q.media_uri || q.media_url || null, 
+        (q as any).audio_url || null, q.explanation || null
       );
     }
   });

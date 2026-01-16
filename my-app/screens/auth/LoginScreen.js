@@ -26,8 +26,8 @@ const loginBanner = require("../../assets/screens/auth/login/login_banner.png");
 import { Audio } from 'expo-av';
 
 export default function LoginScreen({ navigation }) {
-  const [phoneNumber, setPhoneNumber] = useState("078522556");
-  const [password, setPassword] = useState("12345678");
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [password, setPassword] = useState("");
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   

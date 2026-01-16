@@ -7,6 +7,8 @@ import {
     SafeAreaView,
     TouchableOpacity,
     Image,
+    BackHandler,
+    Alert
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -28,10 +30,43 @@ export default function QuizComleteScreen({ route, navigation }) {
         level,
         skillId,
         skillName,
+        sessionNumber
     } = route.params || {};
     const wrongCount = (totalQuestions || 0) - (score || 0);
-    const percentage = (score / totalQuestions) * 100;
+    // Ensure we handle potential string/undefined values safely
+    const validScore = Number(score) || 0;
+    const validTotal = Number(totalQuestions) || 1; 
+    const percentage = (validScore / validTotal) * 100;
     const isPass = percentage >= 50;
+
+    // Handle Hardware Back Button
+    useEffect(() => {
+        const backAction = () => {
+            Alert.alert("Exit", "Where would you like to go?", [
+                {
+                    text: "Stay Here",
+                    onPress: () => null,
+                    style: "cancel"
+                },
+                {
+                    text: "Go to Home",
+                    onPress: () => navigation.navigate("SkillsTopic", { subjectId, subjectName, level })
+                },
+                {
+                    text: "Exit App",
+                    onPress: () => BackHandler.exitApp()
+                }
+            ]);
+            return true;
+        };
+
+        const backHandler = BackHandler.addEventListener(
+            "hardwareBackPress",
+            backAction
+        );
+
+        return () => backHandler.remove();
+    }, [navigation, subjectId, subjectName, level]);
 
     // Play Sound Effect
     useEffect(() => {
@@ -82,14 +117,26 @@ export default function QuizComleteScreen({ route, navigation }) {
     };
 
     const handleContinue = () => {
-        navigation.navigate("SkillsTopic", { subjectId, subjectName, level });
+        // Go to next session
+        const nextSession = (sessionNumber || 1) + 1;
+        navigation.replace("ReadyToQuiz", {
+             skillId,
+             skillName,
+             subjectId,
+             subjectName,
+             level,
+             sessionNumber: nextSession 
+        });
     };
 
     const handleReplay = () => {
         navigation.replace("ReadyToQuiz", {
             skillId,
             skillName,
+            subjectId,
             subjectName,
+            level,
+            sessionNumber,
             isPlayAgain: true,
         });
     };
@@ -223,13 +270,14 @@ const styles = StyleSheet.create({
         alignItems: "center",
         justifyContent: "flex-start", // Start from top to leave room for answers below
         paddingTop: 80, // Push text down into the panel's "content" area
-        aspectRatio: 0.82,
+        // aspectRatio: 0.82, // Removed to ensure height is respected
     },
     content: {
         flex: 1,
         width: "80%",
         alignItems: "center",
         marginTop: 45,
+        zIndex: 10,
     },
     title: {
         fontSize: 28,
@@ -291,6 +339,7 @@ const styles = StyleSheet.create({
         width: "80%",
         marginTop: "auto",
         marginBottom: 40,
+        zIndex: 20,
     },
     actionBtn: {
         flexDirection: "row",

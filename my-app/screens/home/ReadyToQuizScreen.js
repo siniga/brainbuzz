@@ -19,18 +19,44 @@ export default function ReadyToQuizScreen({ route, navigation }) {
   // Play Sound & Manage BG Music
   useEffect(() => {
     let mounted = true;
+    let soundLoaded = false;
 
     const initAudio = async () => {
-        // Mute BG
-        await pauseBackgroundMusic();
-        
-        // Play Countdown
         try {
-            const { sound } = await Audio.Sound.createAsync(countdownSoundFile, { isLooping: true, shouldPlay: true, volume: 1.0 });
-            soundRef.current = sound;
-            await sound.playAsync();
+            // Configure audio mode first
+            await Audio.setAudioModeAsync({
+                allowsRecordingIOS: false,
+                playsInSilentModeIOS: true,
+                shouldDuckAndroid: true,
+                playThroughEarpieceAndroid: false,
+                staysActiveInBackground: false,
+            });
+
+            // Pause background music
+            await pauseBackgroundMusic();
+            
+            // Play Countdown sound (not looping, since countdown is only 3 seconds)
+            if (mounted) {
+                const { sound } = await Audio.Sound.createAsync(
+                    countdownSoundFile, 
+                    { 
+                        isLooping: false, 
+                        shouldPlay: true, 
+                        volume: 1.0 
+                    }
+                );
+                
+                if (mounted) {
+                    soundRef.current = sound;
+                    soundLoaded = true;
+                    console.log("Countdown sound playing...");
+                } else {
+                    // Component unmounted before sound loaded, clean up immediately
+                    await sound.unloadAsync().catch(() => {});
+                }
+            }
         } catch (e) {
-            console.log("Error playing countdown", e);
+            console.log("Error playing countdown sound:", e);
         }
     };
 
@@ -38,11 +64,15 @@ export default function ReadyToQuizScreen({ route, navigation }) {
 
     return () => {
         mounted = false;
-        // Resume BG
+        // Resume BG music
         resumeBackgroundMusic();
-        // Unload Countdown
-        if (soundRef.current) {
-            soundRef.current.unloadAsync();
+        
+        // Unload Countdown sound only if it was successfully loaded
+        if (soundRef.current && soundLoaded) {
+            soundRef.current.unloadAsync().catch(() => {
+                // Silently catch errors during cleanup
+            });
+            soundRef.current = null;
         }
     };
   }, []);

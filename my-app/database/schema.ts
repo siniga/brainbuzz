@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 export const CREATE_TABLES = [
   // Subjects
@@ -30,6 +30,7 @@ export const CREATE_TABLES = [
     options_json TEXT NOT NULL, -- JSON array
     correct_answer TEXT NOT NULL,
     media_uri TEXT,
+    audio_url TEXT,
     explanation TEXT,
     FOREIGN KEY(skill_id) REFERENCES skills(id)
   );`,
