@@ -13,6 +13,8 @@ import {
     Alert,
     FlatList,
     ScrollView,
+    ActivityIndicator,
+    BackHandler,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
@@ -51,6 +53,11 @@ const POWERUP_BOMB = require("../../assets/screens/quiz/powerup/bomb.png");
 const POWERUP_FREEZE = require("../../assets/screens/quiz/powerup/freeze.png");
 const POWERUP_HINT = require("../../assets/screens/quiz/powerup/hint.png");
 const POWERUP_SKIP = require("../../assets/screens/quiz/powerup/skip.png");
+const SUCCESS_MSG_BG = require("../../assets/screens/quiz/messages/success-msg-bg.png");
+const WRONG_MSG_BG = require("../../assets/screens/quiz/messages/wrong-msg-bg.png");
+const REWARD_MSG_BG = require("../../assets/screens/quiz/messages/reward_claims_bg.png");
+const CONTINUE_BTN = require("../../assets/screens/quiz/messages/continue-btn.png");
+const CLAIM_BUTTON = require("../../assets/screens/quiz/messages/claim-btn.png");
 
 // Button Images
 const BTN_BLUE = require("../../assets/screens/quiz/btns/blue.png");
@@ -88,7 +95,7 @@ const PRAISES = [
 
 const ENCOURAGEMENTS = [
     {
-        text: "Good try! Try again!",
+        text: "Good try!",
         sound: require("../../assets/sound/questionnare/wrong-answer/let-give-it-another-shot.mp3"),
     },
     {
@@ -96,7 +103,7 @@ const ENCOURAGEMENTS = [
         sound: require("../../assets/sound/questionnare/wrong-answer/nice-effort.mp3"),
     },
     {
-        text: "Oops! That was tricky.",
+        text: "That was tricky.",
         sound: require("../../assets/sound/questionnare/wrong-answer/oops-that-was-tricky.mp3"),
     },
     {
@@ -108,7 +115,7 @@ const ENCOURAGEMENTS = [
         sound: require("../../assets/sound/questionnare/wrong-answer/you-are-getting-close.mp3"),
     },
     {
-        text: "Not yet!, you can do it",
+        text: "you can do it",
         sound: require("../../assets/sound/questionnare/wrong-answer/let-think-again.mp3"),
     },
 ];
@@ -347,7 +354,8 @@ const PowerUpBottomSheet = ({
                         <TouchableOpacity
                             style={[
                                 styles.powerUpImageBtn,
-                                (coins < 30 && !isTimerFrozen) &&
+                                coins < 30 &&
+                                    !isTimerFrozen &&
                                     styles.powerUpImageBtnDisabled,
                             ]}
                             onPress={() => handleUsePowerUp("freeze")}
@@ -402,28 +410,291 @@ const FeedbackBottomSheet = ({
     isCorrect,
     correctAnswer,
     praiseText,
+    onContinue,
+    isStreakPlaying,
 }) => {
+    const translateX = useSharedValue(0);
+    const { width } = Dimensions.get('window');
+    
+    // Reset position when visible changes
+    useEffect(() => {
+        if (visible) {
+            translateX.value = 0;
+        }
+    }, [visible]);
+    
+    const animatedStyle = useAnimatedStyle(() => ({
+        transform: [{ translateX: translateX.value }],
+    }));
+    
+    const handleContinuePress = async () => {
+        if (isStreakPlaying) return;
+        
+        // Play swipe/slide sound
+        try {
+            const { sound } = await Audio.Sound.createAsync(
+                require("../../assets/sound/questionnare/long-medium-swish.mp3"),
+                { shouldPlay: true, volume: 0.4 }
+            );
+            sound.setOnPlaybackStatusUpdate(async (status) => {
+                if (status.didJustFinish) await sound.unloadAsync();
+            });
+        } catch (e) {
+            console.log("Slide sound error:", e);
+        }
+        
+        // Slide out to the left
+        translateX.value = withTiming(-width, {
+            duration: 300,
+            easing: Easing.in(Easing.ease),
+        }, (finished) => {
+            if (finished) {
+                runOnJS(onContinue)();
+            }
+        });
+    };
+    
+    if (!visible) return null;
+
   return (
-    <Modal transparent={true} visible={visible} animationType="slide">
-      <View style={styles.sheetOverlay}>
-                <View
+        <View style={styles.popupOverlay}>
+            <Animated.View style={[styles.popupContainer, animatedStyle]}>
+                <ImageBackground
+                    source={isCorrect ? SUCCESS_MSG_BG : WRONG_MSG_BG}
+                    style={styles.popupImageBg}
+                    resizeMode="contain"
+                >
+
+                    {isCorrect ? (
+                        <Text
                     style={[
-                        styles.sheetContent,
-                        isCorrect ? styles.sheetCorrect : styles.sheetWrong,
+                                styles.sheetTitle,
+                                { position: "relative", bottom: 20, left: 40 },
                     ]}
                 >
-                    <Text style={styles.sheetTitle}>
-                        {isCorrect ? praiseText || "Correct!" : "Keep Trying!"}
+                            {praiseText || "Great!"}
                     </Text>
-                    {!isCorrect && (
-                        <Text style={styles.sheetSub}>
-                            Answer: {correctAnswer}
+                    ) : (
+                        <Text
+                            style={[
+                                styles.sheetTitle,
+                                { position: "relative", bottom: 35, left: 40 },
+                            ]}
+                        >
+                            {praiseText || "Great!"}
                         </Text>
                     )}
+
+                    {/* Display Correct Answer */}
+                    {correctAnswer && (
+                        <View style={styles.correctAnswerContainer}>
+                            <Text style={styles.correctAnswerLabel}>
+                                {isCorrect ? "Your Answer:" : "Correct Answer:"}
+                            </Text>
+                            {isCorrect ? (
+                                <Text style={[styles.correctAnswerText, { position: "relative", bottom: 30, left: 0 }]}>
+                                    {correctAnswer}
+                                </Text>
+                            ) : (
+                                <Text style={[styles.correctAnswerText, { position: "relative", bottom: 34, left: 0 }]}>
+                                    {correctAnswer}
+                        </Text>
+                    )}
+          </View>
+                    )}
+
+                    <TouchableOpacity
+                        style={[
+                            styles.continueButton,
+                            isStreakPlaying && styles.continueButtonDisabled,
+                        ]}
+                        onPress={handleContinuePress}
+                        activeOpacity={isStreakPlaying ? 1 : 0.8}
+                        disabled={isStreakPlaying}
+                    >
+                        <Image
+                            source={CONTINUE_BTN}
+                            style={[
+                                styles.continueButtonImage,
+                                isStreakPlaying &&
+                                    styles.continueButtonImageDisabled,
+                            ]}
+                            resizeMode="contain"
+                        />
+                    </TouchableOpacity>
+
+                    {isStreakPlaying && (
+                        <Text style={styles.streakWaitingText}>
+                            🎉 Amazing! Wait for the streak celebration! 🎉
+                        </Text>
+                    )}
+                </ImageBackground>
+            </Animated.View>
+        </View>
+    );
+};
+
+// Action Buttons Bottom Sheet Component
+const ActionButtonsBottomSheet = ({
+    visible,
+    onQuit,
+    onSubmit,
+    isProcessing,
+}) => {
+    return (
+        <Modal
+            transparent={true}
+            visible={visible}
+            animationType="slide"
+            onRequestClose={onQuit}
+        >
+            <View style={styles.actionSheetOverlay}>
+                <Pressable
+                    style={styles.actionSheetBackdrop}
+                    onPress={onQuit}
+                />
+                <View style={styles.actionSheetContent}>
+                    <View style={styles.actionSheetHandle} />
+
+                    <Text style={styles.actionSheetTitle}>
+                        Ready to submit?
+                    </Text>
+
+                    <View style={styles.actionSheetButtons}>
+                        <TouchableOpacity
+                            style={[
+                                styles.actionSheetBtn,
+                                styles.actionSheetQuitBtn,
+                            ]}
+                            onPress={onQuit}
+                            disabled={isProcessing}
+                        >
+                            <Ionicons
+                                name="close-circle"
+                                size={24}
+                                color="#F44336"
+                            />
+                            <Text
+                                style={[
+                                    styles.actionSheetBtnText,
+                                    { color: "#F44336" },
+                                ]}
+                            >
+                                Cancel
+                            </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={[
+                                styles.actionSheetBtn,
+                                styles.actionSheetSubmitBtn,
+                            ]}
+                            onPress={onSubmit}
+                            disabled={isProcessing}
+                        >
+                            <Ionicons
+                                name="checkmark-circle"
+                                size={24}
+                                color="white"
+                            />
+                            <Text
+                                style={[
+                                    styles.actionSheetBtnText,
+                                    { color: "white" },
+                                ]}
+                            >
+                                Submit Answer
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
           </View>
       </View>
     </Modal>
   );
+};
+
+// --- Welcome Reward Modal ---
+const WelcomeRewardModal = ({ visible, onContinue, isButtonDisabled }) => {
+    const translateX = useSharedValue(0);
+    const { width } = Dimensions.get('window');
+    
+    // Reset position when visible changes
+    useEffect(() => {
+        if (visible) {
+            translateX.value = 0;
+        }
+    }, [visible]);
+    
+    const animatedStyle = useAnimatedStyle(() => ({
+        transform: [{ translateX: translateX.value }],
+    }));
+    
+    const handleContinuePress = async () => {
+        // Don't allow press if disabled
+        if (isButtonDisabled) return;
+        
+        // Play swipe/slide sound
+        try {
+            const { sound } = await Audio.Sound.createAsync(
+                require("../../assets/sound/questionnare/long-medium-swish.mp3"),
+                { shouldPlay: true, volume: 0.4 }
+            );
+            sound.setOnPlaybackStatusUpdate(async (status) => {
+                if (status.didJustFinish) await sound.unloadAsync();
+            });
+        } catch (e) {
+            console.log("Slide sound error:", e);
+        }
+        
+        // Slide out to the left
+        translateX.value = withTiming(-width, {
+            duration: 300,
+            easing: Easing.in(Easing.ease),
+        }, (finished) => {
+            if (finished) {
+                runOnJS(onContinue)();
+            }
+        });
+    };
+    
+    if (!visible) return null;
+
+    return (
+        <View style={styles.popupOverlay}>
+            <Animated.View style={[styles.popupContainer, animatedStyle]}>
+                <ImageBackground
+                    source={REWARD_MSG_BG}
+                    style={styles.popupImageBg}
+                    resizeMode="contain"
+                >
+
+                    <View style={styles.correctAnswerContainer}>
+                       <Image source={require("../../assets/screens/quiz/messages/rewards/welcome-reward.png")} style={styles.rewardIcon} />
+                    </View>
+
+                    <TouchableOpacity
+                        style={[
+                            styles.continueButton, 
+                            { position: "relative", top: 75 },
+                            isButtonDisabled && styles.continueButtonDisabled
+                        ]}
+                        onPress={handleContinuePress}
+                        activeOpacity={isButtonDisabled ? 1 : 0.8}
+                        disabled={isButtonDisabled}
+                    >
+                        <Image
+                            source={CLAIM_BUTTON}
+                            style={[
+                                styles.continueButtonImage,
+                                isButtonDisabled && styles.continueButtonImageDisabled
+                            ]}
+                            resizeMode="contain"
+                        />
+                    </TouchableOpacity>
+                </ImageBackground>
+            </Animated.View>
+        </View>
+    );
 };
 
 import QuizComleteScreen from "../quiz/QuizCompleteScreen";
@@ -476,10 +747,7 @@ const PowerUpFloatingButton = ({ onPress, shouldAnimate }) => {
     }, [shouldAnimate]);
 
     const animatedStyle = useAnimatedStyle(() => ({
-        transform: [
-            { scale: scale.value },
-            { rotate: `${rotate.value}deg` }
-        ],
+        transform: [{ scale: scale.value }, { rotate: `${rotate.value}deg` }],
     }));
 
     const pulseDotStyle = useAnimatedStyle(() => ({
@@ -500,7 +768,9 @@ const PowerUpFloatingButton = ({ onPress, shouldAnimate }) => {
                     <Ionicons name="flash" size={24} color="white" />
                     <Text style={styles.powerUpBtnText}>POWER-UPS</Text>
                     {shouldAnimate && (
-                        <Animated.View style={[styles.pulseDot, pulseDotStyle]} />
+                        <Animated.View
+                            style={[styles.pulseDot, pulseDotStyle]}
+                        />
                     )}
                 </LinearGradient>
             </TouchableOpacity>
@@ -523,9 +793,9 @@ export default function QuestionnaireNew({ route, navigation }) {
     const [questions, setQuestions] = useState([]);
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
     const [loading, setLoading] = useState(true);
-    const [cacheBuster] = useState(Date.now());
     const [selectedOption, setSelectedOption] = useState(null);
     const [dragOrderedOptions, setDragOrderedOptions] = useState([]);
+    const [shuffledMcqOptions, setShuffledMcqOptions] = useState([]);
     const [timer, setTimer] = useState(30);
     const [coins, setCoins] = useState(0);
     
@@ -548,6 +818,11 @@ export default function QuestionnaireNew({ route, navigation }) {
     const [startTime, setStartTime] = useState(Date.now());
     const [sessionNumber, setSessionNumber] = useState(1);
     const [userId, setUserId] = useState("user_default");
+    
+    // Welcome Reward States (First Session Only)
+    const [showWelcomeReward, setShowWelcomeReward] = useState(false);
+    const [hasTriggeredWelcomeReward, setHasTriggeredWelcomeReward] = useState(false);
+    const [isRewardSoundPlaying, setIsRewardSoundPlaying] = useState(false);
 
     // Power-up States
     const [disabledOptions, setDisabledOptions] = useState([]);
@@ -559,8 +834,12 @@ export default function QuestionnaireNew({ route, navigation }) {
         110: false,
     });
 
+    // Action Buttons Bottom Sheet State
+    const [showActionSheet, setShowActionSheet] = useState(false);
+
     const processingRef = useRef(false);
     const timeoutTriggeredRef = useRef(false);
+    const pendingNavigationRef = useRef(null);
     const [shuffledPraises] = useState(() => shuffleArray(PRAISES));
     const [shuffledEncouragements] = useState(() =>
         shuffleArray(ENCOURAGEMENTS)
@@ -574,7 +853,23 @@ export default function QuestionnaireNew({ route, navigation }) {
     const [hasQuestionAudio, setHasQuestionAudio] = useState(false);
     const [isPlayingAudio, setIsPlayingAudio] = useState(false);
     const feedbackAudioPlayingRef = useRef(false);
+    const feedbackSoundRef = useRef(null); // Track feedback sound to stop it when needed
     const pendingQuestionAudioRef = useRef(false);
+
+    // Preloading refs for performance
+    const preloadedAudioRef = useRef({}); // Store preloaded audio sounds by question index
+    const preloadedImagesRef = useRef(new Set()); // Track preloaded image URIs
+    const [preloadedImageComponents, setPreloadedImageComponents] = useState(
+        []
+    ); // Pre-rendered images
+    
+    // Image loading states
+    const [questionImageLoading, setQuestionImageLoading] = useState(false);
+    const [imageSelectionLoading, setImageSelectionLoading] = useState({});
+
+    // Animation values for content slide transitions
+    const contentTranslateX = useSharedValue(0);
+    const contentOpacity = useSharedValue(1);
 
     // Reset state when question changes
     useEffect(() => {
@@ -584,24 +879,163 @@ export default function QuestionnaireNew({ route, navigation }) {
         setDisabledOptions([]);
         setIsTimerFrozen(false);
         timeoutTriggeredRef.current = false;
+        
+        // Shuffle MCQ options when question changes
+        if (currentQuestion && currentQuestion.type === "mcq" && currentQuestion.options) {
+            setShuffledMcqOptions(shuffleArray(currentQuestion.options));
+        } else {
+            setShuffledMcqOptions([]);
+        }
+    }, [currentQuestionIndex, questions]);
 
-        // Preload next question's image(s)
-        const nextIndex = currentQuestionIndex + 1;
-        if (nextIndex < questions.length) {
-            const nextQ = questions[nextIndex];
-            if (nextQ.media && nextQ.media.length > 0) {
-                nextQ.media.forEach((img) => {
+    // Slide animation when question changes
+    useEffect(() => {
+        if (currentQuestionIndex > 0 && !loading) {
+            // Start from right with fade
+            contentTranslateX.value = 300;
+            contentOpacity.value = 0;
+
+            // Slide in with spring animation
+            contentTranslateX.value = withSpring(0, {
+                damping: 15,
+                stiffness: 100,
+                mass: 0.8,
+            });
+
+            // Fade in
+            contentOpacity.value = withTiming(1, {
+                duration: 250,
+                easing: Easing.out(Easing.ease),
+            });
+        }
+    }, [currentQuestionIndex, loading]);
+
+    // Animated style for content
+    const contentAnimatedStyle = useAnimatedStyle(() => ({
+        transform: [{ translateX: contentTranslateX.value }],
+        opacity: contentOpacity.value,
+    }));
+
+    // Enhanced batch preloading strategy for better performance
+    useEffect(() => {
+        const preloadResources = async () => {
+            if (!questions || questions.length === 0) return;
+
+            let startIndex, endIndex;
+
+            // Strategy: Preload in batches of 5
+            if (currentQuestionIndex === 0) {
+                // Initial load: Preload first 5 questions (0-4)
+                startIndex = 0;
+                endIndex = Math.min(5, questions.length);
+                console.log("🚀 Initial batch: Preloading questions 1-5");
+            } else if (currentQuestionIndex === 3 && questions.length > 5) {
+                // At question 4: Start preloading questions 6-10 in background
+                startIndex = 5;
+                endIndex = Math.min(10, questions.length);
+                console.log("🚀 Second batch: Preloading questions 6-10");
+            } else if (currentQuestionIndex === 8 && questions.length > 10) {
+                // At question 9: Preload questions 11-15 if they exist
+                startIndex = 10;
+                endIndex = Math.min(15, questions.length);
+                console.log("🚀 Third batch: Preloading questions 11-15");
+            } else {
+                // Regular preload: current + next 3 questions
+                startIndex = currentQuestionIndex;
+                endIndex = Math.min(startIndex + 4, questions.length);
+            }
+
+            const imagesToPreload = [];
+
+            for (let i = startIndex; i < endIndex; i++) {
+                const question = questions[i];
+
+                // Preload images
+                if (question.media && question.media.length > 0) {
+                    question.media.forEach((img, idx) => {
                     const cleanImg = img.replace(/^\//, "");
                     const uri = img.startsWith("http")
                         ? img
-                        : `${IMAGE_URL}/${cleanImg}`;
-                    Image.prefetch(uri).catch((e) =>
-                        console.log("Prefetch error", e)
-                    );
-                });
+                        : `${cleanImg}`;
+
+                        // Add to pre-render list for instant display (only visible range)
+                        if (
+                            i >= currentQuestionIndex &&
+                            i < currentQuestionIndex + 4
+                        ) {
+                            imagesToPreload.push({ uri, key: `${i}-${idx}` });
+                        }
+
+                        if (!preloadedImagesRef.current.has(uri)) {
+                            Image.prefetch(uri)
+                                .then(() => {
+                                    preloadedImagesRef.current.add(uri);
+                                    console.log(
+                                        `✓ Preloaded image for Q${i + 1}`
+                                    );
+                                })
+                                .catch((e) =>
+                                    console.log(
+                                        `✗ Image prefetch error Q${i + 1}:`,
+                                        e
+                                    )
+                                );
+                        }
+                    });
+                }
+
+                // Preload audio (skip currently playing question)
+                if (
+                    i !== currentQuestionIndex &&
+                    question.audio_url &&
+                    !preloadedAudioRef.current[i]
+                ) {
+                    try {
+                        const cleanAudioPath = question.audio_url.replace(
+                            /^\//,
+                            ""
+                        );
+                        const audioUri = question.audio_url.startsWith("http")
+                            ? question.audio_url
+                            : `${cleanAudioPath}`;
+
+                        // Create sound but don't play yet
+                        const { sound } = await Audio.Sound.createAsync(
+                            { uri: audioUri },
+                            { shouldPlay: false, volume: 1.0 }
+                        );
+
+                        preloadedAudioRef.current[i] = sound;
+                        console.log(`✓ Preloaded audio for Q${i + 1}`);
+                    } catch (error) {
+                        console.log(
+                            `✗ Error preloading audio Q${i + 1}:`,
+                            error
+                        );
+                    }
+                }
             }
-        }
+
+            // Update pre-rendered image components for instant display (only visible range)
+            setPreloadedImageComponents(imagesToPreload);
+        };
+
+        preloadResources();
     }, [currentQuestionIndex, questions]);
+
+    // Reset image loading states when question changes
+    useEffect(() => {
+        setQuestionImageLoading(false);
+        setImageSelectionLoading({});
+        
+        // Fallback: Force hide loading indicators after 5 seconds
+        const timeoutId = setTimeout(() => {
+            setQuestionImageLoading(false);
+            setImageSelectionLoading({});
+        }, 5000);
+        
+        return () => clearTimeout(timeoutId);
+    }, [currentQuestionIndex]);
 
     // Play question audio instruction when question changes
     useEffect(() => {
@@ -614,8 +1048,14 @@ export default function QuestionnaireNew({ route, navigation }) {
         const playQuestionAudio = async () => {
             console.log("Audio check - Question index:", currentQuestionIndex);
             console.log("Current question:", currentQuestion);
-            console.log("Current question audio_url:", currentQuestion?.audio_url);
-            console.log("Feedback audio playing:", feedbackAudioPlayingRef.current);
+            console.log(
+                "Current question audio_url:",
+                currentQuestion?.audio_url
+            );
+            console.log(
+                "Feedback audio playing:",
+                feedbackAudioPlayingRef.current
+            );
             
             // Update hasQuestionAudio state
             if (!currentQuestion || !currentQuestion.audio_url) {
@@ -636,9 +1076,14 @@ export default function QuestionnaireNew({ route, navigation }) {
                     
                     // Poll until feedback audio finishes
                     const checkInterval = setInterval(() => {
-                        if (!feedbackAudioPlayingRef.current && pendingQuestionAudioRef.current) {
+                        if (
+                            !feedbackAudioPlayingRef.current &&
+                            pendingQuestionAudioRef.current
+                        ) {
                             clearInterval(checkInterval);
-                            console.log("Feedback audio finished, playing question audio");
+                            console.log(
+                                "Feedback audio finished, playing question audio"
+                            );
                             actuallyPlayAudio();
                         }
                     }, 100);
@@ -647,12 +1092,16 @@ export default function QuestionnaireNew({ route, navigation }) {
                     setTimeout(() => {
                         clearInterval(checkInterval);
                         if (pendingQuestionAudioRef.current) {
-                            console.log("Timeout reached, playing question audio anyway");
+                            console.log(
+                                "Timeout reached, playing question audio anyway"
+                            );
                             actuallyPlayAudio();
                         }
                     }, 5000);
                 } else {
-                    console.log("No feedback audio playing, playing question audio immediately");
+                    console.log(
+                        "No feedback audio playing, playing question audio immediately"
+                    );
                     actuallyPlayAudio();
                 }
             };
@@ -671,29 +1120,53 @@ export default function QuestionnaireNew({ route, navigation }) {
                         staysActiveInBackground: false,
                     });
 
-                    // Construct the audio URL
-                    const cleanAudioPath = currentQuestion.audio_url.replace(/^\//, "");
-                    const audioUri = currentQuestion.audio_url.startsWith("http")
+                    // Check if we have a preloaded sound for this question
+                    const preloadedSound =
+                        preloadedAudioRef.current[currentQuestionIndex];
+
+                    if (preloadedSound) {
+                        // Use preloaded audio for instant playback
+                        console.log(
+                            "🚀 Using preloaded audio for instant playback"
+                        );
+                        questionAudioRef.current = preloadedSound;
+                        await preloadedSound.setPositionAsync(0); // Reset to start
+                        await preloadedSound.playAsync();
+
+                        // Remove from preloaded cache since we're using it
+                        delete preloadedAudioRef.current[currentQuestionIndex];
+                    } else {
+                        // Fallback: load on demand (shouldn't happen often if preloading works)
+                        console.log(
+                            "⏳ Loading audio on demand (not preloaded)"
+                        );
+                        const cleanAudioPath =
+                            currentQuestion.audio_url.replace(/^\//, "");
+                        const audioUri = currentQuestion.audio_url.startsWith(
+                            "http"
+                        )
                         ? currentQuestion.audio_url
-                        : `${IMAGE_URL}${cleanAudioPath}`;
+                        : `${cleanAudioPath}`;
 
-                    console.log("Actually playing question audio now:", audioUri);
+                        console.log("Loading audio from:", audioUri);
 
-                    // Play the audio
                     const { sound } = await Audio.Sound.createAsync(
                         { uri: audioUri },
                         { shouldPlay: true, volume: 1.0 }
                     );
                     
                     questionAudioRef.current = sound;
+                    }
 
                     // Auto-cleanup when audio finishes
-                    sound.setOnPlaybackStatusUpdate(async (status) => {
+                    questionAudioRef.current.setOnPlaybackStatusUpdate(
+                        async (status) => {
                         if (status.didJustFinish) {
                             console.log("Question audio finished playing");
                             setIsPlayingAudio(false);
                         }
-                    });
+                        }
+                    );
                 } catch (error) {
                     console.log("Error playing question audio:", error);
                     setIsPlayingAudio(false);
@@ -722,7 +1195,8 @@ export default function QuestionnaireNew({ route, navigation }) {
 
     // Function to replay question audio
     const replayQuestionAudio = async () => {
-        if (!currentQuestion || !currentQuestion.audio_url || isPlayingAudio) return;
+        if (!currentQuestion || !currentQuestion.audio_url || isPlayingAudio)
+            return;
         
         setIsPlayingAudio(true);
         
@@ -732,11 +1206,27 @@ export default function QuestionnaireNew({ route, navigation }) {
                 await questionAudioRef.current.setPositionAsync(0);
                 await questionAudioRef.current.playAsync();
             } else {
-                // Recreate sound if it was cleaned up
-                const cleanAudioPath = currentQuestion.audio_url.replace(/^\//, "");
-                const audioUri = currentQuestion.audio_url.startsWith("http")
+                // Check preloaded audio first
+                const preloadedSound =
+                    preloadedAudioRef.current[currentQuestionIndex];
+
+                if (preloadedSound) {
+                    console.log("🚀 Replaying preloaded audio");
+                    questionAudioRef.current = preloadedSound;
+                    await preloadedSound.setPositionAsync(0);
+                    await preloadedSound.playAsync();
+                    delete preloadedAudioRef.current[currentQuestionIndex];
+                } else {
+                    // Recreate sound if it was cleaned up and not preloaded
+                    const cleanAudioPath = currentQuestion.audio_url.replace(
+                        /^\//,
+                        ""
+                    );
+                    const audioUri = currentQuestion.audio_url.startsWith(
+                        "http"
+                    )
                     ? currentQuestion.audio_url
-                    : `${IMAGE_URL}${cleanAudioPath}`;
+                    : `${cleanAudioPath}`;
 
                 const { sound } = await Audio.Sound.createAsync(
                     { uri: audioUri },
@@ -744,12 +1234,15 @@ export default function QuestionnaireNew({ route, navigation }) {
                 );
                 
                 questionAudioRef.current = sound;
+                }
 
-                sound.setOnPlaybackStatusUpdate(async (status) => {
+                questionAudioRef.current.setOnPlaybackStatusUpdate(
+                    async (status) => {
                     if (status.didJustFinish) {
                         setIsPlayingAudio(false);
                     }
-                });
+                    }
+                );
             }
         } catch (error) {
             console.log("Error replaying question audio:", error);
@@ -758,7 +1251,8 @@ export default function QuestionnaireNew({ route, navigation }) {
     };
 
     // Monitor coins for power-up availability (no longer auto-opens sheet)
-    const [shouldAnimatePowerUpBtn, setShouldAnimatePowerUpBtn] = useState(false);
+    const [shouldAnimatePowerUpBtn, setShouldAnimatePowerUpBtn] =
+        useState(false);
     
     useEffect(() => {
         // Check if user has enough coins for any power-up
@@ -778,12 +1272,47 @@ export default function QuestionnaireNew({ route, navigation }) {
         }
     }, [coins, triggeredMilestones]);
 
+    // Show action sheet when answer is selected (for selection-based questions only)
+    useEffect(() => {
+        if (!currentQuestion) return;
+
+        const isSelectionType = currentQuestion.type === "selection";
+
+        if (!isSelectionType) return;
+
+        // Show sheet when option is selected
+        const hasSelection = selectedOption !== null;
+
+        setShowActionSheet(hasSelection && !isProcessing);
+    }, [selectedOption, currentQuestion, isProcessing]);
+
+    // Auto-submit drag_order when all items are ordered
+    useEffect(() => {
+        if (!currentQuestion || currentQuestion.type !== "drag_order") return;
+        if (isProcessing) return;
+
+        // Check if all items are ordered
+        const allItemsOrdered = 
+            dragOrderedOptions.length > 0 &&
+            dragOrderedOptions.length === currentQuestion.options.length;
+
+        if (allItemsOrdered) {
+            // Automatically submit after a short delay
+            const timer = setTimeout(() => {
+                handleAnswer(dragOrderedOptions.join(", "));
+            }, 500); // 500ms delay to let user see their final selection
+
+            return () => clearTimeout(timer);
+        }
+    }, [dragOrderedOptions, currentQuestion, isProcessing]);
+
     const handleDismissSheet = () => {
         setShowPowerUpSheet(false);
     };
 
     const handleOpenPowerUpSheet = () => {
-        if (coins >= 25) { // Only open if they have coins for at least hint
+        if (coins >= 25) {
+            // Only open if they have coins for at least hint
             setShowPowerUpSheet(true);
         }
     };
@@ -809,7 +1338,14 @@ export default function QuestionnaireNew({ route, navigation }) {
         return () => {
             if (interval) clearInterval(interval);
         };
-    }, [loading, questions, timer, isProcessing, isTimerFrozen, showPowerUpSheet]);
+    }, [
+        loading,
+        questions,
+        timer,
+        isProcessing,
+        isTimerFrozen,
+        showPowerUpSheet,
+    ]);
 
     // Handle Time Up
     useEffect(() => {
@@ -832,6 +1368,15 @@ export default function QuestionnaireNew({ route, navigation }) {
         stopAudio();
         return () => {
             if (resumeBackgroundMusic) resumeBackgroundMusic();
+
+            // Cleanup all preloaded audio on unmount
+            Object.values(preloadedAudioRef.current).forEach((sound) => {
+                if (sound) {
+                    sound.unloadAsync().catch(() => {});
+                }
+            });
+            preloadedAudioRef.current = {};
+            preloadedImagesRef.current.clear();
         };
     }, []);
 
@@ -941,23 +1486,60 @@ export default function QuestionnaireNew({ route, navigation }) {
 
     const triggerStreakEffect = async () => {
         setShowStreakAnimation(true);
+
+        // 🔇 STOP ALL OTHER SOUNDS before playing genius sound
+        // Stop feedback sound if playing
+        if (feedbackSoundRef.current) {
+            try {
+                await feedbackSoundRef.current.stopAsync();
+                await feedbackSoundRef.current.unloadAsync();
+                feedbackSoundRef.current = null;
+                feedbackAudioPlayingRef.current = false;
+                console.log("🔇 Stopped feedback sound for streak");
+            } catch (e) {
+                console.log("Error stopping feedback sound:", e);
+            }
+        }
+
+        // Stop question audio if playing
+        if (questionAudioRef.current) {
+            try {
+                await questionAudioRef.current.stopAsync();
+                await questionAudioRef.current.unloadAsync();
+                questionAudioRef.current = null;
+                setIsPlayingAudio(false);
+                console.log("🔇 Stopped question audio for streak");
+            } catch (e) {
+                console.log("Error stopping question audio:", e);
+            }
+        }
+
+        // Play "You are a genius" sound and wait for it to finish
         try {
             const { sound } = await Audio.Sound.createAsync(
-                require("../../assets/sound/3-answers-streak-sound.mp3"),
+                require("../../assets/sound/questionnare/right-answer/you-are-a-genius.mp3"),
                 { shouldPlay: true, volume: 1.0 }
             );
+
+            // Wait for sound to finish before hiding streak animation
             sound.setOnPlaybackStatusUpdate(async (status) => {
                 if (status.didJustFinish) {
                     await sound.unloadAsync();
+                    // Hide streak animation after sound finishes
+                    setShowStreakAnimation(false);
+                    console.log(
+                        "🎉 'You are a genius' sound finished, hiding streak"
+                    );
                 }
             });
+            console.log("🎉 Playing 'You are a genius' sound for 3-streak!");
         } catch (e) {
             console.log("Streak Sound Error:", e);
-        }
-        
+            // If sound fails, hide animation after 2 seconds as fallback
         setTimeout(() => {
             setShowStreakAnimation(false);
-        }, 1500);
+            }, 2000);
+        }
     };
 
     const playSoundEffect = async (isCorrect, rotatingSoundFile) => {
@@ -965,25 +1547,41 @@ export default function QuestionnaireNew({ route, navigation }) {
         
         try {
             if (isCorrect) {
-                 // Play genius sound for correct answers
+                // Play rotating praise sound for correct answers
+                if (rotatingSoundFile) {
                  const { sound } = await Audio.Sound.createAsync(
-                    require("../../assets/sound/genius-sound.mp3"),
+                        rotatingSoundFile,
                      { shouldPlay: true, volume: 1.0 }
                  );
+                    feedbackSoundRef.current = sound; // Store ref so it can be stopped
                  sound.setOnPlaybackStatusUpdate(async (status) => {
                      if (status.didJustFinish) {
                          await sound.unloadAsync();
+                            feedbackAudioPlayingRef.current = false;
+                            feedbackSoundRef.current = null;
                      }
                  });
-                 
-                 // DISABLED: Praise sound (rotatingSoundFile) - not playing anymore
-                 // Mark feedback audio as finished after genius sound
-                 setTimeout(() => {
+                } else {
                      feedbackAudioPlayingRef.current = false;
-                 }, 1000);
+                }
             } else {
-                 // DISABLED: Wrong answer sound (rotatingSoundFile) - not playing anymore
+                // Play rotating encouragement sound for wrong answers
+                if (rotatingSoundFile) {
+                    const { sound } = await Audio.Sound.createAsync(
+                        rotatingSoundFile,
+                        { shouldPlay: true, volume: 1.0 }
+                    );
+                    feedbackSoundRef.current = sound; // Store ref so it can be stopped
+                    sound.setOnPlaybackStatusUpdate(async (status) => {
+                        if (status.didJustFinish) {
+                            await sound.unloadAsync();
                  feedbackAudioPlayingRef.current = false;
+                            feedbackSoundRef.current = null;
+                        }
+                    });
+                } else {
+                    feedbackAudioPlayingRef.current = false;
+                }
             }
         } catch (e) {
             console.log("Sound Error:", e);
@@ -996,6 +1594,47 @@ export default function QuestionnaireNew({ route, navigation }) {
         finalScore = score,
         finalCorrectCount = correctCount
     ) => {
+        // Explicit cleanup: Stop and unload all audio immediately
+        console.log("🧹 Cleaning up audio resources before quiz completion...");
+
+        // Stop current question audio
+        if (questionAudioRef.current) {
+            try {
+                await questionAudioRef.current.stopAsync();
+                await questionAudioRef.current.unloadAsync();
+                questionAudioRef.current = null;
+                console.log("✓ Current question audio cleaned");
+            } catch (e) {
+                console.log("Error cleaning question audio:", e);
+            }
+        }
+
+        // Unload all preloaded audio
+        const preloadedCount = Object.keys(preloadedAudioRef.current).length;
+        if (preloadedCount > 0) {
+            for (const [index, sound] of Object.entries(
+                preloadedAudioRef.current
+            )) {
+                if (sound) {
+                    try {
+                        await sound.unloadAsync();
+                    } catch (e) {
+                        console.log(
+                            `Error unloading preloaded audio ${index}:`,
+                            e
+                        );
+                    }
+                }
+            }
+            preloadedAudioRef.current = {};
+            console.log(`✓ Cleaned ${preloadedCount} preloaded audio files`);
+        }
+
+        // Clear image tracking (native cache persists, which is good for retries)
+        preloadedImagesRef.current.clear();
+        setPreloadedImageComponents([]);
+        console.log("✓ Cleared image tracking");
+
          const timeTaken = Math.floor((Date.now() - startTime) / 1000);
          try {
               // Note: We use the current state values. Ensure this is called after state updates have propagated.
@@ -1041,6 +1680,71 @@ export default function QuestionnaireNew({ route, navigation }) {
         }
     };
 
+    // Handle Continue button press in feedback popup
+    const handleFeedbackContinue = () => {
+        // Don't allow continue if streak animation is playing
+        if (showStreakAnimation) {
+            console.log("⏸️ Waiting for streak animation to finish...");
+            return;
+        }
+
+        // Hide feedback
+        setFeedback({
+            visible: false,
+            isCorrect: false,
+            correctAnswer: "",
+            praiseText: "",
+        });
+
+        // Reset processing flags to allow next interaction
+        setIsProcessing(false);
+        processingRef.current = false;
+
+        // Get stored navigation data
+        const navData = pendingNavigationRef.current;
+        if (!navData) {
+            console.log("⚠️ No pending navigation data");
+            return;
+        }
+
+        console.log("📍 Continue clicked, navigating...", navData);
+
+        // ALWAYS navigate when Continue is pressed (ignore skipTransition)
+        // Since we're waiting for user confirmation, we always want to move forward
+        if (navData.shouldFinish) {
+            finishQuiz(navData.newScore, navData.newCorrectCount);
+        } else {
+            goToNextQuestion();
+        }
+
+        // Clear pending navigation
+        pendingNavigationRef.current = null;
+    };
+    
+    // Handle Welcome Reward Continue
+    const handleWelcomeRewardContinue = async () => {
+        setShowWelcomeReward(false);
+        console.log("✅ Welcome reward dismissed, continuing quiz...");
+        
+        // Continue with normal quiz flow using stored navigation data
+        const navData = pendingNavigationRef.current;
+        if (navData) {
+            // Reset processing flags
+            setIsProcessing(false);
+            processingRef.current = false;
+            
+            // Navigate to next question or finish quiz
+            if (navData.shouldFinish) {
+                finishQuiz(navData.newScore, navData.newCorrectCount);
+            } else {
+                goToNextQuestion();
+            }
+            
+            // Clear pending navigation
+            pendingNavigationRef.current = null;
+        }
+    };
+
     const handleAnswer = async (selectedOption, skipTransition = false) => {
         if (processingRef.current && !skipTransition) return;
 
@@ -1061,6 +1765,19 @@ export default function QuestionnaireNew({ route, navigation }) {
 
         processingRef.current = true;
         setIsProcessing(true);
+
+        // 🔇 STOP QUESTION AUDIO IMMEDIATELY to prevent overlap with feedback sounds
+        if (questionAudioRef.current) {
+            try {
+                await questionAudioRef.current.stopAsync();
+                await questionAudioRef.current.unloadAsync();
+                questionAudioRef.current = null;
+                setIsPlayingAudio(false);
+                console.log("🔇 Stopped question audio before feedback");
+            } catch (e) {
+                console.log("Error stopping question audio:", e);
+            }
+        }
 
         const isCorrect =
             selectedOption !== null &&
@@ -1084,13 +1801,21 @@ export default function QuestionnaireNew({ route, navigation }) {
             }
         }
 
+        // Check if welcome reward will trigger (don't show feedback if it will)
+        const willTriggerWelcomeReward = isCorrect && sessionNumber === 1 && 
+            (correctCount + 1) === 8 && !hasTriggeredWelcomeReward;
+
+        if (!willTriggerWelcomeReward) {
         setFeedback({
             visible: true,
             isCorrect,
             correctAnswer: currentQuestion.correctAnswer,
             praiseText: feedbackText,
         });
+        }
         
+        // Don't play feedback sounds if welcome reward will trigger
+        if (!willTriggerWelcomeReward) {
         if (selectedOption === null) {
             // Timeout sound
             feedbackAudioPlayingRef.current = true;
@@ -1099,10 +1824,12 @@ export default function QuestionnaireNew({ route, navigation }) {
                     require("../../assets/sound/game-over-lost-sound.mp3"),
                     { shouldPlay: true, volume: 1.0 }
                 );
+                    feedbackSoundRef.current = toSound; // Store ref so it can be stopped
                 toSound.setOnPlaybackStatusUpdate(async (s) => {
                     if (s.didJustFinish) {
                         await toSound.unloadAsync();
                         feedbackAudioPlayingRef.current = false;
+                            feedbackSoundRef.current = null;
                     }
                 });
             } catch (e) {
@@ -1112,7 +1839,15 @@ export default function QuestionnaireNew({ route, navigation }) {
         } else {
             // Only play feedback sound if NOT the last question
             if (currentQuestionIndex < questions.length - 1) {
+                    // 🎯 FIX: Check if this will trigger a streak BEFORE playing regular sound
+                    const willTriggerStreak = isCorrect && (streak + 1) === 3;
+                    
+                    if (!willTriggerStreak) {
                 playSoundEffect(isCorrect, feedbackSound);
+                    } else {
+                        console.log("⏭️ Skipping regular praise sound - streak incoming!");
+                    }
+                }
             }
         }
 
@@ -1121,32 +1856,28 @@ export default function QuestionnaireNew({ route, navigation }) {
             setShowCoinAnimation(true);
             setTimeout(() => setShowCoinAnimation(false), 2000); // Hide coin animation after 2s
 
-            // Delay coin increment to sync with animation
-            setTimeout(() => {
                 const newStreak = streak + 1;
                 let earnedCoins = 10;
+            
                 if (newStreak === 3) {
+                // 🎯 Trigger streak effect immediately (no delay) to prevent sound overlap
                     triggerStreakEffect();
                     setStreak(0);
                     earnedCoins = 20;
+                // Update coins immediately for streak
+                setCoins((prev) => prev + earnedCoins);
                 } else {
                     setStreak(newStreak);
-                }
+                // Delay coin increment for non-streak answers to sync with animation
+                setTimeout(() => {
                 setCoins((prev) => prev + earnedCoins);
-            }, 1300); // Adjust delay as needed (e.g. 1000ms)
+                }, 1300);
+            }
         } else {
             setStreak(0);
         }
 
-        setTimeout(
-            async () => {
-                setFeedback({
-                    visible: false,
-                    isCorrect: false,
-                    correctAnswer: "",
-                    praiseText: "",
-                });
-            
+        // Update score and answer history immediately
             let newScore = score;
             let newCorrectCount = correctCount;
 
@@ -1154,21 +1885,89 @@ export default function QuestionnaireNew({ route, navigation }) {
                  newScore += 1;
                  newCorrectCount += 1;
                     setCorrectCount((prev) => prev + 1);
+            
+            // 🎉 WELCOME REWARD: First session, 8 correct answers
+            if (sessionNumber === 1 && newCorrectCount === 8 && !hasTriggeredWelcomeReward) {
+                console.log("🎊 WELCOME REWARD TRIGGERED! First session, 8/10 correct!");
+                setHasTriggeredWelcomeReward(true);
+                
+                // STOP ALL SOUNDS immediately
+                if (questionAudioRef.current) {
+                    try {
+                        await questionAudioRef.current.stopAsync();
+                        await questionAudioRef.current.unloadAsync();
+                        questionAudioRef.current = null;
+                        setIsPlayingAudio(false);
+                        console.log("🔇 Stopped question audio for welcome reward");
+                    } catch (e) {
+                        console.log("Error stopping question audio:", e);
+                    }
+                }
+                
+                if (feedbackSoundRef.current) {
+                    try {
+                        await feedbackSoundRef.current.stopAsync();
+                        await feedbackSoundRef.current.unloadAsync();
+                        feedbackSoundRef.current = null;
+                        feedbackAudioPlayingRef.current = false;
+                        console.log("🔇 Stopped feedback audio for welcome reward");
+                    } catch (e) {
+                        console.log("Error stopping feedback audio:", e);
+                    }
+                }
+                
+                // Show welcome reward immediately (no feedback popup)
+                setShowWelcomeReward(true);
+                
+                // Play celebration sound when reward popup shows
+                try {
+                    setIsRewardSoundPlaying(true); // Disable button
+                    const { sound } = await Audio.Sound.createAsync(
+                        require("../../assets/sound/questionnare/rewards/welcome-reward-sound.mp3"),
+                        { shouldPlay: true, volume: 0.8 }
+                    );
+                    sound.setOnPlaybackStatusUpdate(async (status) => {
+                        if (status.didJustFinish) {
+                            await sound.unloadAsync();
+                            setIsRewardSoundPlaying(false); // Enable button when sound finishes
+                        }
+                    });
+                    console.log("🎵 Playing celebration sound for welcome reward");
+                } catch (e) {
+                    console.log("Celebration sound error:", e);
+                    setIsRewardSoundPlaying(false); // Enable button even on error
+                }
+                
+                // Store navigation data for later
+                pendingNavigationRef.current = {
+                    newScore,
+                    newCorrectCount,
+                    skipTransition,
+                    shouldFinish: currentQuestionIndex >= questions.length - 1,
+                };
+                
+            setScore(newScore);
+                setAnswerHistory((prev) => [...prev, isCorrect]);
+
+                // Exit early - skip normal feedback flow
+                console.log("🎉 Skipping feedback popup, showing welcome reward");
+                return;
+            }
             }
             setScore(newScore);
                 setAnswerHistory((prev) => [...prev, isCorrect]);
 
-            if (currentQuestionIndex < questions.length - 1) {
-                if (!skipTransition) {
-                    goToNextQuestion();
-                }
-            } else {
-                if (!skipTransition) {
-                    finishQuiz(newScore, newCorrectCount);
-                }
-            }
-            },
-            skipTransition ? 500 : 1500
+        // Store values for use in handleFeedbackContinue
+        pendingNavigationRef.current = {
+            newScore,
+            newCorrectCount,
+            skipTransition,
+            shouldFinish: currentQuestionIndex >= questions.length - 1,
+        };
+
+        console.log(
+            "📝 Stored pending navigation:",
+            pendingNavigationRef.current
         );
     };
 
@@ -1325,15 +2124,18 @@ export default function QuestionnaireNew({ route, navigation }) {
             String(currentQuestion.correctAnswer).trim();
         return (
             <ExplodingMCQButton
-                key={`${currentQuestionIndex}-${item}`} // Force remount on question change
                 item={item}
                 index={index}
-                onAnswerPress={(itm) => handleAnswer(itm, isThisCorrect)} // only skip transition if correct (animation handles it)
-                disabled={isProcessing || disabledOptions.includes(item)}
+                onAnswerPress={(itm) => handleAnswer(itm, false)} // Always use normal flow (wait for Continue button)
+                disabled={
+                    isProcessing ||
+                    isPlayingAudio ||
+                    disabledOptions.includes(item)
+                }
                 isCorrect={isThisCorrect}
                 buttonImage={buttonImages[index % buttonImages.length]}
                 styles={styles}
-                onAnimationComplete={goToNextQuestion}
+                onAnimationComplete={null} // Don't auto-advance; wait for Continue button
             />
         );
     };
@@ -1346,11 +2148,14 @@ export default function QuestionnaireNew({ route, navigation }) {
             <Pressable
                 style={({ pressed }) => [
                     styles.answerWrapper,
-                    isDisabled && styles.answerWrapperDisabled,
+                    (isDisabled || isPlayingAudio) &&
+                        styles.answerWrapperDisabled,
                     pressed && { transform: [{ scale: 0.92 }], opacity: 0.9 },
                 ]}
-                onPress={() => !isDisabled && setSelectedOption(item)}
-                disabled={isProcessing || isDisabled}
+                onPress={() =>
+                    !(isDisabled || isPlayingAudio) && setSelectedOption(item)
+                }
+                disabled={isProcessing || isPlayingAudio || isDisabled}
             >
                 <ImageBackground
                     source={buttonImages[index % buttonImages.length]}
@@ -1418,8 +2223,8 @@ export default function QuestionnaireNew({ route, navigation }) {
                     <View style={styles.progressContainer}>
                         {questions.length > 0 &&
                             questions.map((_, index) => (
+                                <View key={index} style={styles.dotWrapper}>
                              <View 
-                                key={index} 
                                 style={[
                                     styles.dot, 
                                         index < currentQuestionIndex
@@ -1429,6 +2234,12 @@ export default function QuestionnaireNew({ route, navigation }) {
                                             : styles.dotFuture,
                                 ]} 
                              />
+                                    {index === currentQuestionIndex && (
+                                        <Text style={styles.dotNumberText}>
+                                            {index + 1}
+                                        </Text>
+                                    )}
+                                </View>
                          ))}
                     </View>
 
@@ -1449,12 +2260,12 @@ export default function QuestionnaireNew({ route, navigation }) {
                     resizeMode="contain"
                 />
 
-                <ImageBackground
+                {/* <ImageBackground
                     source={QUIZ_MAIN_PANEL}
                     style={styles.panel}
                     resizeMode="stretch"
-                >
-                    <View style={styles.content}>
+                > */}
+                <Animated.View style={[styles.content, contentAnimatedStyle]}>
                         {loading ? (
                             <Text style={styles.loadingText}>Loading...</Text>
                         ) : currentQuestion ? (
@@ -1470,9 +2281,17 @@ export default function QuestionnaireNew({ route, navigation }) {
                                             disabled={isPlayingAudio}
                                         >
                                             <Ionicons
-                                                name={isPlayingAudio ? "volume-high" : "play-circle"}
+                                            name={
+                                                isPlayingAudio
+                                                    ? "volume-high"
+                                                    : "play-circle"
+                                            }
                                                 size={28}
-                                                color={isPlayingAudio ? "#FF9800" : "#4CAF50"}
+                                            color={
+                                                isPlayingAudio
+                                                    ? "#FF9800"
+                                                    : "#4CAF50"
+                                            }
                                             />
                                         </TouchableOpacity>
                                     )}
@@ -1480,23 +2299,40 @@ export default function QuestionnaireNew({ route, navigation }) {
                                 {currentQuestion.type !== "image_selection" &&
                                     currentQuestion.media &&
                                     currentQuestion.media.length > 0 && (
+                                        <View style={{ position: 'relative', width: '100%', height: 200 }}>
                                         <Image
                                             source={{
-                                                uri: `${IMAGE_URL}${currentQuestion.media[0]}?v=${cacheBuster}`,
+                                                    uri: currentQuestion.media[0].startsWith('http') 
+                                                        ? currentQuestion.media[0] 
+                                                        : `${IMAGE_URL}${currentQuestion.media[0]}`,
+                                                    cache: "force-cache",
                                             }}
                                             style={styles.questionImage}
                                             resizeMode="contain"
-                                        />
+                                                onLoadStart={() => setQuestionImageLoading(true)}
+                                                onLoadEnd={() => setQuestionImageLoading(false)}
+                                                onError={(e) => {
+                                                    console.log("Image load error:", e.nativeEvent.error);
+                                                    setQuestionImageLoading(false);
+                                                }}
+                                            />
+                                            {questionImageLoading && (
+                                                <View style={styles.imageLoadingOverlay}>
+                                                    <ActivityIndicator size="large" color="#4A90E2" />
+                                                    <Text style={styles.loadingText}>Loading...</Text>
+                                                </View>
+                                            )}
+                                        </View>
                                     )}
 
                                 <View style={styles.answersBody}>
                                     {/* MCQ - Immediate Action */}
                                     {currentQuestion.type === "mcq" && (
                                         <FlatList
-                                            data={currentQuestion.options}
+                                            data={shuffledMcqOptions}
                                             renderItem={renderMCQItem}
                                             keyExtractor={(item, index) =>
-                                                index.toString()
+                                                `${currentQuestionIndex}-${index}`
                                             }
                                             numColumns={2}
                                             contentContainerStyle={
@@ -1531,9 +2367,12 @@ export default function QuestionnaireNew({ route, navigation }) {
                                     )}
 
                                     {/* Image Selection - Requires Submit */}
-                                    {currentQuestion.type ===
-                                        "image_selection" && (
-                                        <View style={styles.imageGrid}>
+                                {currentQuestion.type === "image_selection" && (
+                                    <>
+                                        <View style={[
+                                            styles.imageGrid,
+                                            currentQuestion.media.length > 3 && styles.imageGridMultiColumn
+                                        ]}>
                                             {currentQuestion.media.map(
                                                 (img, index) => {
                                                     const optionValue =
@@ -1543,8 +2382,10 @@ export default function QuestionnaireNew({ route, navigation }) {
                                                     const isSelected =
                                                         selectedOption ===
                                                         optionValue;
-                                                    const cleanImg =
-                                                        img.replace(/^\//, "");
+                                                const cleanImg = img.replace(
+                                                    /^\//,
+                                                    ""
+                                                );
                                                     const uri = img.startsWith(
                                                         "http"
                                                     )
@@ -1559,20 +2400,25 @@ export default function QuestionnaireNew({ route, navigation }) {
                                                         <Pressable
                                                             key={index}
                                                             onPress={() =>
-                                                                !isDisabled &&
-                                                                setSelectedOption(
-                                                                    optionValue
-                                                                )
+                                                            !(
+                                                                isDisabled ||
+                                                                isPlayingAudio ||
+                                                                isProcessing
+                                                            ) &&
+                                                                handleAnswer(optionValue)
                                                             }
                                                             disabled={
                                                                 isProcessing ||
+                                                            isPlayingAudio ||
                                                                 isDisabled
                                                             }
                                                             style={[
                                                                 styles.imageOption,
+                                                                currentQuestion.media.length > 3 && styles.imageOptionGrid,
                                                                 isSelected &&
                                                                     styles.imageOptionSelected,
-                                                                isDisabled && {
+                                                            (isDisabled ||
+                                                                isPlayingAudio) && {
                                                                     opacity: 0.3,
                                                                 },
                                                             ]}
@@ -1580,12 +2426,24 @@ export default function QuestionnaireNew({ route, navigation }) {
                                                             <Image
                                                                 source={{
                                                                     uri: uri,
+                                                                cache: "force-cache",
                                                                 }}
                                                                 style={
                                                                     styles.imageOptionImg
                                                                 }
                                                                 resizeMode="contain"
+                                                                onLoadStart={() => setImageSelectionLoading(prev => ({ ...prev, [index]: true }))}
+                                                                onLoadEnd={() => setImageSelectionLoading(prev => ({ ...prev, [index]: false }))}
+                                                                onError={(e) => {
+                                                                    console.log(`Image selection ${index} error:`, e.nativeEvent.error);
+                                                                    setImageSelectionLoading(prev => ({ ...prev, [index]: false }));
+                                                                }}
                                                             />
+                                                            {imageSelectionLoading[index] && (
+                                                                <View style={styles.imageLoadingOverlay}>
+                                                                    <ActivityIndicator size="small" color="#4A90E2" />
+                                                                </View>
+                                                            )}
                                                             {isSelected && (
                                                                 <View
                                                                     style={
@@ -1594,9 +2452,7 @@ export default function QuestionnaireNew({ route, navigation }) {
                                                                 >
                                                                     <Ionicons
                                                                         name="checkmark"
-                                                                        size={
-                                                                            20
-                                                                        }
+                                                                    size={20}
                                                                         color="white"
                                                                     />
                                                                 </View>
@@ -1606,6 +2462,7 @@ export default function QuestionnaireNew({ route, navigation }) {
                                                 }
                                             )}
                                         </View>
+                                    </>
                                     )}
 
                                     {/* Drag Order */}
@@ -1633,7 +2490,8 @@ export default function QuestionnaireNew({ route, navigation }) {
                                                                 )
                                                             }
                                                             disabled={
-                                                                isProcessing
+                                                            isProcessing ||
+                                                            isPlayingAudio
                                                             }
                                                         >
                                                             <View
@@ -1693,7 +2551,8 @@ export default function QuestionnaireNew({ route, navigation }) {
                                                                 )
                                                             }
                                                             disabled={
-                                                                isProcessing
+                                                            isProcessing ||
+                                                            isPlayingAudio
                                                             }
                                                         >
                                                             <View
@@ -1716,67 +2575,7 @@ export default function QuestionnaireNew({ route, navigation }) {
                                         </View>
                                     )}
 
-                                    {/* Action Buttons: Only for selection, image_selection and drag_order */}
-                                    {(currentQuestion.type === "selection" ||
-                                        currentQuestion.type ===
-                                            "image_selection" ||
-                                        currentQuestion.type ===
-                                            "drag_order") && (
-                                        <View
-                                            style={
-                                                styles.actionButtonsContainer
-                                            }
-                                        >
-                                            <TouchableOpacity
-                                                style={[
-                                                    styles.actionBtn,
-                                                    styles.quitBtn,
-                                                ]}
-                                                onPress={() =>
-                                                    navigation.goBack()
-                                                }
-                                                disabled={isProcessing}
-                                            >
-                                                <Text
-                                                    style={styles.actionBtnText}
-                                                >
-                                                    QUIT
-                                                </Text>
-                                            </TouchableOpacity>
-
-                                            <TouchableOpacity
-                                                style={[
-                                                    styles.actionBtn,
-                                                    styles.submitBtn,
-                                                    ((!selectedOption &&
-                                                        currentQuestion.type !==
-                                                            "drag_order") ||
-                                                        (currentQuestion.type ===
-                                                            "drag_order" &&
-                                                            dragOrderedOptions.length ===
-                                                                0)) &&
-                                                        styles.disabledBtn,
-                                                ]}
-                                                onPress={handleSubmit}
-                                                disabled={
-                                                    (!selectedOption &&
-                                                        currentQuestion.type !==
-                                                            "drag_order") ||
-                                                    (currentQuestion.type ===
-                                                        "drag_order" &&
-                                                        dragOrderedOptions.length ===
-                                                            0) ||
-                                                    isProcessing
-                                                }
-                                            >
-                                                <Text
-                                                    style={styles.actionBtnText}
-                                                >
-                                                    SUBMIT
-                                                </Text>
-                                            </TouchableOpacity>
-                                        </View>
-                                    )}
+                                {/* Action buttons moved to bottom sheet */}
                                 </View>
                             </>
                         ) : (
@@ -1784,8 +2583,8 @@ export default function QuestionnaireNew({ route, navigation }) {
                                 No questions found.
                             </Text>
                         )}
-                    </View>
-                </ImageBackground>
+                </Animated.View>
+                {/* </ImageBackground> */}
                 
                 {/* Power-Up Button at Bottom */}
                 {coins >= 25 && !feedback.visible && (
@@ -1805,6 +2604,26 @@ export default function QuestionnaireNew({ route, navigation }) {
                     answerHistory={answerHistory}
                     onClose={handleDismissSheet}
                 />
+
+                {/* Hidden preloaded images for instant display - keeps them decoded in memory */}
+                <View
+                    style={{
+                        position: "absolute",
+                        opacity: 0,
+                        width: 0,
+                        height: 0,
+                        overflow: "hidden",
+                    }}
+                    pointerEvents="none"
+                >
+                    {preloadedImageComponents.map(({ uri, key }) => (
+                        <Image
+                            key={key}
+                            source={{ uri, cache: "force-cache" }}
+                            style={{ width: 1, height: 1 }}
+                        />
+                    ))}
+                </View>
             </SafeAreaView>
              
             <FeedbackBottomSheet  
@@ -1812,6 +2631,26 @@ export default function QuestionnaireNew({ route, navigation }) {
                 isCorrect={feedback.isCorrect} 
                 correctAnswer={feedback.correctAnswer} 
                 praiseText={feedback.praiseText}
+                onContinue={handleFeedbackContinue}
+                isStreakPlaying={showStreakAnimation}
+            />
+            
+            {/* Welcome Reward Modal - First Session Only */}
+            <WelcomeRewardModal
+                visible={showWelcomeReward}
+                onContinue={handleWelcomeRewardContinue}
+                isButtonDisabled={isRewardSoundPlaying}
+            />
+
+            {/* Action Buttons Bottom Sheet - shows when answer is selected */}
+            <ActionButtonsBottomSheet
+                visible={showActionSheet}
+                onQuit={() => setShowActionSheet(false)}
+                onSubmit={() => {
+                    setShowActionSheet(false);
+                    handleSubmit();
+                }}
+                isProcessing={isProcessing}
             />
 
             {showStreakAnimation && (
@@ -1839,6 +2678,7 @@ const styles = StyleSheet.create({
     safeArea: {
         flex: 1,
         alignItems: "center",
+        backgroundColor: "rgba(255, 255,255, 0.5)",
     },
     header: {
         position: "absolute",
@@ -1876,6 +2716,11 @@ const styles = StyleSheet.create({
         justifyContent: "center",
         gap: 6,
     },
+    dotWrapper: {
+        position: "relative",
+        alignItems: "center",
+        justifyContent: "center",
+    },
     dot: {
         width: 10,
         height: 10,
@@ -1890,11 +2735,21 @@ const styles = StyleSheet.create({
     dotCurrent: {
         backgroundColor: "#FFEB3B", // Yellow
         borderColor: "#FFF",
-        transform: [{ scale: 1.3 }],
+        transform: [{ scale: 2 }],
     },
     dotFuture: {
         backgroundColor: "rgba(0, 0, 0, 0.3)", // Semi-transparent dark
         borderColor: "rgba(255,255,255,0.2)",
+    },
+    dotNumberText: {
+        position: "absolute",
+        top: -20,
+        fontSize: 14,
+        fontWeight: "bold",
+        color: "#FFEB3B",
+        textShadowColor: "rgba(0, 0, 0, 0.8)",
+        textShadowOffset: { width: 1, height: 1 },
+        textShadowRadius: 3,
     },
 
     banner: {
@@ -1904,6 +2759,7 @@ const styles = StyleSheet.create({
         aspectRatio: 3,
     },
     panel: {
+        display: "none",
         width: "100%",
         height: 500,
         marginTop: -0,
@@ -1913,10 +2769,13 @@ const styles = StyleSheet.create({
         aspectRatio: 1.07,
     },
     content: {
-        width: "54%", // Limit width so text doesn't hit edges
+        // backgroundColor:"rgba(255, 255,255, 0.5)",
+        width: "100%", // Limit width so text doesn't hit edges
         alignItems: "center",
         flex: 1,
-        marginBottom: 20,
+        marginTop: 0,
+        paddingTop: 40,
+        // marginBottom: 0,
     },
     questionHeader: {
         flexDirection: "row",
@@ -1961,7 +2820,7 @@ const styles = StyleSheet.create({
     },
     questionImage: {
         width: "100%",
-        height: 150,
+        height: 200,
         marginTop: 10,
         borderRadius: 10,
     },
@@ -1976,7 +2835,6 @@ const styles = StyleSheet.create({
         alignItems: "center",
     },
     columnWrapper: {
-        
         justifyContent: "center",
         gap: 5, // Adds space between columns (React Native 0.71+)
     },
@@ -1990,7 +2848,6 @@ const styles = StyleSheet.create({
         // shadowOpacity: 0.25,
         // shadowRadius: 3.84,
         backgroundColor: "transparent",
-        
     },
     answerWrapperDisabled: {
         opacity: 0.5,
@@ -2010,7 +2867,7 @@ const styles = StyleSheet.create({
     },
     answerBtnText: {
         color: "white",
-        fontSize: 16,
+        fontSize: 26,
         fontWeight: "bold",
         textAlign: "center",
     },
@@ -2028,22 +2885,32 @@ const styles = StyleSheet.create({
         right: 15,
     },
     imageGrid: {
+        flexDirection: "column",
+        alignItems: "center",
+        marginTop: 10,
+        width: "100%",
+    },
+    imageGridMultiColumn: {
         flexDirection: "row",
         flexWrap: "wrap",
-        justifyContent: "space-around",
-        marginTop: 10,
+        justifyContent: "center",
+        gap: 10,
     },
     imageOption: {
-        width: "45%",
-        height: 130,
-        // aspectRatio: 1.8,
-        marginBottom: 15,
+        width: "90%",
+        height: 150,
+        marginBottom: 20,
         borderRadius: 12,
         overflow: "hidden",
         borderWidth: 2,
         borderColor: "transparent",
         backgroundColor: "#f0f0f0",
         elevation: 2,
+    },
+    imageOptionGrid: {
+        width: "45%",
+        height: 140,
+        marginBottom: 10,
     },
     imageOptionSelected: {
         borderColor: "#4CAF50",
@@ -2063,6 +2930,26 @@ const styles = StyleSheet.create({
         height: 24,
         alignItems: "center",
         justifyContent: "center",
+    },
+    submitAnswerButton: {
+        marginTop: 20,
+        width: '40%',
+        aspectRatio: 1.5,
+        alignSelf: 'center',
+        marginBottom: 20,
+    },
+    submitAnswerButtonBg: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingVertical: 15,
+        paddingHorizontal: 30,
+        gap: 10,
+    },
+    submitAnswerButtonText: {
+        color: 'white',
+        fontSize: 16,
+        fontWeight: 'bold',
     },
     dragContainer: {
         width: "100%",
@@ -2091,11 +2978,15 @@ const styles = StyleSheet.create({
         marginTop: 10,
     },
     dragItem: {
-        paddingVertical: 8,
-        paddingHorizontal: 12,
-        borderRadius: 20,
-        margin: 4,
-        elevation: 2,
+        paddingVertical: 16,
+        paddingHorizontal: 24,
+        borderRadius: 25,
+        margin: 8,
+        elevation: 3,
+        minWidth: 80,
+        minHeight: 50,
+        justifyContent: "center",
+        alignItems: "center",
     },
     dragItemTarget: {
         backgroundColor: "#FF7043", // Orange/Deep for placed items
@@ -2106,7 +2997,7 @@ const styles = StyleSheet.create({
     dragItemText: {
         color: "white",
         fontWeight: "bold",
-        fontSize: 14,
+        fontSize: 20,
     },
     dragPlaceholder: {
         color: "#8D6E63",
@@ -2149,7 +3040,7 @@ const styles = StyleSheet.create({
     sheetOverlay: {
         flex: 1,
         justifyContent: "flex-end",
-        backgroundColor: "rgba(0,0,0,0)", // Transparent background so user sees the quiz behind
+        backgroundColor: "rgba(0,0,0,0.1)", // Transparent background so user sees the quiz behind
     },
     sheetContent: {
         width: "100%",
@@ -2163,22 +3054,165 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: -5 },
         shadowOpacity: 0.3,
         shadowRadius: 5,
+        overflow: "hidden",
+        minHeight: 200,
+    },
+    sheetContentImage: {
+        borderTopLeftRadius: 30,
+        borderTopRightRadius: 30,
     },
     sheetCorrect: {
-        backgroundColor: "#E8F5E9",
+        // Background color removed - using image instead
         borderTopWidth: 6,
         borderColor: "#4CAF50",
     },
     sheetWrong: {
-        backgroundColor: "#FFEBEE",
+        // Background color removed - using image instead
         borderTopWidth: 6,
         borderColor: "#F44336",
     },
+
+    // --- Full Screen Feedback Modal ---
+    fullScreenModalContainer: {
+        flex: 1,
+        justifyContent: "flex-end",
+        alignItems: "center",
+        backgroundColor: "rgba(0, 0, 0, 0.7)",
+    },
+    fullScreenModalOverlay: {
+        flex: 1,
+        justifyContent: "center",
+        alignItems: "center",
+        backgroundColor: "rgba(0, 0, 0, 0.7)",
+    },
+    fullScreenMessageBg: {
+        width: "120%",
+        height: "120%",
+
+        justifyContent: "center",
+        alignItems: "center",
+        paddingVertical: 60,
+        paddingHorizontal: 40,
+    },
+
+    // --- Custom Popup with Image Background ---
+    popupOverlay: {
+        position: "absolute",
+        top: 0,
+        bottom: 0,
+        left: 0,
+        right: 0,
+        justifyContent: "center",
+        alignItems: "center",
+        backgroundColor: "rgba(0, 0, 0, 0.7)",
+        zIndex: 1000,
+        elevation: 1000,
+    },
+    popupContainer: {
+        width: "100%",
+        maxWidth: 500,
+        // alignItems: "center",
+    },
+    popupImageBg: {
+        width: "100%",
+        aspectRatio: 0.9,
+        justifyContent: "center",
+        alignItems: "center",
+        // paddingVertical: 40,
+        // paddingHorizontal: 30,
+    },
+    correctAnswerContainer: {
+        position:"relative",
+        top: 20,
+        // backgroundColor: "rgba(255, 255, 255, 0.9)",
+        paddingVertical: 15,
+        paddingHorizontal: 25,
+        borderRadius: 15,
+   
+        // marginBottom: 170,
+        maxWidth: "85%",
+        alignItems: "center",
+        height: 100,
+
+        // borderWidth: 2,
+        // borderColor: "#4CAF50",
+        // shadowColor: "#000",
+        // shadowOffset: { width: 0, height: 2 },
+        // shadowOpacity: 0.2,
+        // shadowRadius: 4,
+        // elevation: 3,
+    },
+    rewardIcon: {
+        marginLeft: 60,
+        width: 150,
+        height: 150,
+    },
+    correctAnswerLabel: {
+        fontSize: 34,
+        fontWeight: "600",
+        color: "#666",
+        marginBottom: 8,
+        textTransform: "uppercase",
+        letterSpacing: 1,
+        display: "none",
+    },
+    correctAnswerText: {
+        fontSize: 70,
+        fontWeight: "condensedBold",
+        color: "#ffcd00",
+        textAlign: "center",
+        textShadowColor: "rgba(215, 87, 1, 0.9)",
+        textShadowOffset: { width: 2, height: 2 },
+        textShadowRadius: 2,
+    },
+    continueButton: {
+        marginTop: 30,
+    },
+    continueButtonDisabled: {
+        opacity: 0.4,
+    },
+    continueButtonImage: {
+        width: 200,
+        height: 60,
+    },
+    continueButtonImageDisabled: {
+        opacity: 0.5,
+    },
+    streakWaitingText: {
+        fontSize: 16,
+        fontWeight: "600",
+        color: "#FF6B35",
+        textAlign: "center",
+        marginTop: 15,
+        paddingHorizontal: 20,
+        textShadowColor: "rgba(0, 0, 0, 0.3)",
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 2,
+    },
+    customBottomSheetOverlay: {
+        position: "absolute",
+        bottom: 0,
+        left: 0,
+        right: 0,
+        zIndex: 1000,
+        elevation: 1000,
+    },
+    customBottomSheetBg: {
+        width: "100%",
+        minHeight: 308,
+    },
+
     sheetTitle: {
-        fontSize: 28,
+        position: "relative",
+        bottom: 10,
+        left: 40,
+        fontSize: 32,
         fontWeight: "bold",
-        marginBottom: 10,
-        color: "#333",
+        marginBottom: 35,
+        color: "yellow",
+        textShadowColor: "rgba(0, 0, 0, 0.5)",
+        textShadowOffset: { width: 1, height: 1 },
+        textShadowRadius: 2,
     },
     sheetSub: {
         fontSize: 18,
@@ -2192,8 +3226,10 @@ const styles = StyleSheet.create({
         backgroundColor: "rgba(0,0,0,0.5)",
         justifyContent: "center",
         alignItems: "center",
+        backgroundColor: "red",
     },
     feedbackBox: {
+        backgroundColor: "red",
         padding: 30,
         borderRadius: 20,
         alignItems: "center",
@@ -2666,5 +3702,93 @@ const styles = StyleSheet.create({
         backgroundColor: "#4CAF50",
         borderWidth: 2,
         borderColor: "white",
+    },
+
+    // --- Action Buttons Bottom Sheet ---
+    actionSheetOverlay: {
+        flex: 1,
+        justifyContent: "flex-end",
+        // backgroundColor: "rgba(0, 0, 0, 0.5)",
+    },
+    actionSheetBackdrop: {
+        flex: 1,
+    },
+    actionSheetContent: {
+        backgroundColor: "white",
+        borderTopLeftRadius: 25,
+        borderTopRightRadius: 25,
+        paddingHorizontal: 20,
+        paddingBottom: 30,
+        paddingTop: 10,
+        elevation: 20,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: -5 },
+        shadowOpacity: 0.3,
+        shadowRadius: 10,
+    },
+    actionSheetHandle: {
+        width: 40,
+        height: 4,
+        backgroundColor: "#DDD",
+        borderRadius: 2,
+        alignSelf: "center",
+        marginBottom: 20,
+    },
+    actionSheetTitle: {
+        fontSize: 20,
+        fontWeight: "bold",
+        color: "#333",
+        textAlign: "center",
+        marginBottom: 20,
+    },
+    actionSheetButtons: {
+        flexDirection: "row",
+        gap: 15,
+        width: "100%",
+    },
+    actionSheetBtn: {
+        flex: 1,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        paddingVertical: 16,
+        paddingHorizontal: 20,
+        borderRadius: 15,
+        gap: 8,
+        elevation: 3,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 3,
+    },
+    actionSheetQuitBtn: {
+        backgroundColor: "#FFEBEE",
+        borderWidth: 2,
+        borderColor: "#F44336",
+    },
+    actionSheetSubmitBtn: {
+        backgroundColor: "#4CAF50",
+    },
+    actionSheetBtnText: {
+        fontSize: 16,
+        fontWeight: "bold",
+    },
+    imageLoadingOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 10,
+        pointerEvents: 'none',
+    },
+    loadingText: {
+        marginTop: 10,
+        fontSize: 14,
+        color: '#666',
+        fontWeight: '600',
     },
 });

@@ -479,22 +479,22 @@ export default function QuestionnaireScreen({ route, navigation }) {
     return () => { resumeBackgroundMusic(); };
   }, []);
 
-  // Handle Back Button
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
-      if (congratsVisible) return;
-      e.preventDefault();
-      Alert.alert(
-        'Quit Quiz?',
-        'Progress will be lost.',
-        [
-          { text: "No", style: 'cancel', onPress: () => {} },
-          { text: 'Yes', style: 'destructive', onPress: () => navigation.dispatch(e.data.action) },
-        ]
-      );
-    });
-    return unsubscribe;
-  }, [navigation, congratsVisible]);
+  // Handle Back Button - Allow free navigation
+  // useEffect(() => {
+  //   const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+  //     if (congratsVisible) return;
+  //     e.preventDefault();
+  //     Alert.alert(
+  //       'Quit Quiz?',
+  //       'Progress will be lost.',
+  //       [
+  //         { text: "No", style: 'cancel', onPress: () => {} },
+  //         { text: 'Yes', style: 'destructive', onPress: () => navigation.dispatch(e.data.action) },
+  //       ]
+  //     );
+  //   });
+  //   return unsubscribe;
+  // }, [navigation, congratsVisible]);
 
   // Load Data
   useEffect(() => {

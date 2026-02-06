@@ -9,7 +9,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import CustomSplashScreen from './screens/SplashScreen';
 import { navigationRef } from './service/navigationRef';
-import HomeScreen from './screens/home/HomeScreen';
+import DashboardScreen from './screens/home/DashboardScreen';
 import SubjectSelectionScreen from './screens/home/SubjectSelectionScreen';
 import LevelsScreen from './screens/home/LevelsScreen';
 import ReadyToQuizScreen from './screens/home/ReadyToQuizScreen';
@@ -37,8 +37,16 @@ import TempScreen from './screens/auth/TempScreen';
 import { AudioProvider } from './context/AudioContext';
 import MuteButton from './components/MuteButton';
 import { ErrorProvider } from './context/ErrorContext';
+import { LanguageProvider } from './context/LanguageContext';
 import QuestionnaireNew from './screens/home/QuestionnaireNew';
 import QuizCompleteScreen from './screens/quiz/QuizCompleteScreen';
+import AuthScreen from './screens/auth';
+
+// Parent Screens
+import ParentDashboardScreen from './screens/parents/ParentDashboardScreen';
+import DailyReportScreen from './screens/parents/DailyReportScreen';
+import WeeklyReportScreen from './screens/parents/WeeklyReportScreen';
+import MonthlyReportScreen from './screens/parents/MonthlyReportScreen';
 // Keep the native splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync().catch(() => {
   /* reloading the app might trigger some race conditions, ignore them */
@@ -49,8 +57,8 @@ const Stack = createNativeStackNavigator();
 export default function App() {
   const [appIsReady, setAppIsReady] = useState(false);
   const [showCustomSplash, setShowCustomSplash] = useState(true);
-  const [currentRouteName, setCurrentRouteName] = useState('Home');
-  const [initialRoute, setInitialRoute] = useState('Home');
+  const [currentRouteName, setCurrentRouteName] = useState('Index');
+  const [initialRoute, setInitialRoute] = useState('Index');
 
   useEffect(() => {
     async function prepare() {
@@ -78,11 +86,11 @@ export default function App() {
         // 3. Check for auth token
         const token = await AsyncStorage.getItem('userToken');
         if (token) {
-          console.log('User token found, setting initial route to SubjectSelection');
-          setInitialRoute('SubjectSelection');
+          console.log('User token found, setting initial route to Dashboard');
+          setInitialRoute('Dashboard');
         } else {
-          console.log('No user token found, setting initial route to Welcome');
-          setInitialRoute('Welcome');
+          console.log('No user token found, setting initial route to Index');
+          setInitialRoute('Index');
         }
 
         // Artificially delay for a bit to simulate resource loading if needed
@@ -126,16 +134,18 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <ErrorProvider>
-        <AudioProvider>
-          <NavigationContainer
-            onStateChange={(state) => {
-              const routeName = state?.routes[state.index]?.name;
-              setCurrentRouteName(routeName);
-            }}
-            ref={navigationRef}
-          >
+        <LanguageProvider>
+          <AudioProvider>
+            <NavigationContainer
+              onStateChange={(state) => {
+                const routeName = state?.routes[state.index]?.name;
+                setCurrentRouteName(routeName);
+              }}
+              ref={navigationRef}
+            >
             <Stack.Navigator initialRouteName={initialRoute} screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="Home" component={HomeScreen} />
+              <Stack.Screen name="Index" component={AuthScreen} />
+              <Stack.Screen name="Dashboard" component={DashboardScreen} />
               <Stack.Screen name="SubjectSelection" component={SubjectSelectionScreen} />
               <Stack.Screen name="Levels" component={LevelsScreen} />
               <Stack.Screen name="SkillsTopic" component={SkillsTopicScreen} />
@@ -147,6 +157,12 @@ export default function App() {
               <Stack.Screen name="DatabaseDebug" component={DatabaseDebugScreen} />
               <Stack.Screen name="Settings" component={SettingsScreen} />
               <Stack.Screen name="QuizCompleteScreen" component={QuizCompleteScreen} />
+
+              {/* Parent Screens */}
+              <Stack.Screen name="ParentDashboard" component={ParentDashboardScreen} />
+              <Stack.Screen name="DailyReport" component={DailyReportScreen} />
+              <Stack.Screen name="WeeklyReport" component={WeeklyReportScreen} />
+              <Stack.Screen name="MonthlyReport" component={MonthlyReportScreen} />
 
               {/* Auth Screens */}
               <Stack.Screen name="Login" component={LoginScreen} />
@@ -161,7 +177,8 @@ export default function App() {
             {currentRouteName !== 'Questionnaire' && <MuteButton />}
             <StatusBar style="auto" />
           </NavigationContainer>
-        </AudioProvider>
+          </AudioProvider>
+        </LanguageProvider>
       </ErrorProvider>
     </SafeAreaProvider>
   );

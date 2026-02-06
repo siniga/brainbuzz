@@ -15,7 +15,7 @@ const api = axios.create({
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
-  timeout: 10000,
+  timeout: 30000, // Increased from 10s to 30s for better reliability
 });
 
 // Request interceptor to add token if we have one
@@ -44,7 +44,7 @@ api.interceptors.response.use(
       console.log('Session expired, logging out...');
       await AsyncStorage.removeItem('userToken');
       await AsyncStorage.removeItem('userId'); // Added: clear userId for completeness
-      resetRoot('Home'); // Changed from Welcome to Home
+      resetRoot('Index'); // Navigate to Index (AuthScreen) which handles auth routing
     }
     return Promise.reject(error);
   }

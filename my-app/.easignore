@@ -1,1 +1,94 @@
+# EAS Build Ignore File
+# Excludes unnecessary files from EAS build uploads
+
+# Node modules (already handled by EAS, but explicit)
+node_modules/
+
+# Build outputs and caches
+android/app/build/
 android/.gradle/
+android/build/
+android/.cxx/
+ios/build/
+.expo/
+.expo-shared/
+dist/
+
+# Git repository
+.git/
+.gitignore
+
+# IDE and editor files
+.vscode/
+.idea/
+*.iml
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+tmp/
+
+# Test files
+**/__tests__/
+**/__mocks__/
+**/*.test.js
+**/*.test.ts
+**/*.test.jsx
+**/*.test.tsx
+**/*.spec.js
+**/*.spec.ts
+
+# Coverage reports
+coverage/
+.nyc_output/
+
+# Environment files (if you have local ones)
+.env.local
+.env.*.local
+
+# Previous builds
+*.apk
+*.aab
+*.ipa
+
+# Documentation
+docs/
+*.md
+README.md
+CHANGELOG.md
+
+# Large asset folders (uncomment if needed)
+# assets/videos/
+# assets/raw/
+
+# Backend/API folder (if in same repo)
+../api/
+
+# TypeScript build info
+*.tsbuildinfo
+
+# Yarn/npm
+.yarn/
+.pnp.*
+.npm/
+
+# Optional: If you have these
+screenshots/
+.storybook/
+storybook-static/

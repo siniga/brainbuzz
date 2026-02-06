@@ -15,10 +15,10 @@ export default function SettingsScreen({ navigation }) {
         'userData'
       ]);
       
-      // Reset navigation stack to Home
+      // Reset navigation stack to Index (Auth Screen)
       navigation.reset({
         index: 0,
-        routes: [{ name: 'Home' }],
+        routes: [{ name: 'Index' }],
       });
     } catch (e) {
       console.error('Logout failed', e);

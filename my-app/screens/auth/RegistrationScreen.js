@@ -213,10 +213,7 @@ export default function RegistrationScreen({ navigation }) {
                   </View>
                 </ImageBackground>
               </View>
-            </View>
-          </View>
-
-          <TouchableOpacity
+              <TouchableOpacity
             onPress={handleRegister}
             style={styles.registerBtnContainer}
           >
@@ -226,6 +223,10 @@ export default function RegistrationScreen({ navigation }) {
               resizeMode="contain"
             />
           </TouchableOpacity>
+            </View>
+          </View>
+
+       
 
           <TouchableOpacity
             onPress={() => navigation.navigate("Login")}
@@ -373,8 +374,10 @@ const styles = StyleSheet.create({
     textAlignVertical: 'center',
   },
   registerBtnContainer: {
-    position: "absolute",
-    bottom: 230, // Adjust to position below the board
+    position: "relative",
+    top:-30,
+    // position: "absolute",
+    // bottom: 230, // Adjust to position below the board
     zIndex: 2,
     justifyContent: 'center',
     alignItems: 'center',

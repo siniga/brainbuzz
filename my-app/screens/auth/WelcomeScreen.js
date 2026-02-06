@@ -32,7 +32,7 @@ export default function WelcomeScreen({ navigation, route }) {
         
         navigation.reset({
           index: 0,
-          routes: [{ name: 'SubjectSelection' }],
+          routes: [{ name: 'Dashboard' }],
         });
       } else {
         // If we are not syncing, ensure loading state is false so user can see the button
@@ -77,7 +77,7 @@ export default function WelcomeScreen({ navigation, route }) {
               playButtonPressSound();
               navigation.reset({
                 index: 0,
-                routes: [{ name: 'SubjectSelection' }],
+                routes: [{ name: 'Dashboard' }],
               });
             }}
             style={styles.imageButton}

@@ -272,7 +272,7 @@ export const getSkillsByStandard = async (subjectId: string, standard: string, u
      FROM skills s
      LEFT JOIN user_skill_progress p ON s.id = p.skill_id AND p.user_id = ?
      WHERE s.subject_id = ? AND s.standard = ?
-     ORDER BY s.id ASC`,
+     ORDER BY CAST(s.id AS INTEGER) ASC`,
     userId, subjectId, standard
   );
   return result;
@@ -644,6 +644,121 @@ export const markRowsSynced = async (tableName: 'user_session_logs' | 'user_skil
     `UPDATE ${tableName} SET synced = 1 WHERE id IN (${placeholders})`,
     ...ids
   );
+};
+
+// Dashboard Stats
+export const getUserDashboardStats = async (userId: string) => {
+  const db = await openDB();
+  
+  // Get total stars earned
+  const starsResult = await db.getFirstAsync<{ total_stars: number | null }>(
+    `SELECT SUM(stars_earned) as total_stars FROM user_skill_progress WHERE user_id = ?`,
+    [userId]
+  );
+  
+  // Get completed levels/skills count
+  const completedResult = await db.getFirstAsync<{ completed: number }>(
+    `SELECT COUNT(*) as completed FROM user_skill_progress WHERE user_id = ? AND is_completed = 1`,
+    [userId]
+  );
+  
+  // Get total levels in progress
+  const inProgressResult = await db.getFirstAsync<{ in_progress: number }>(
+    `SELECT COUNT(*) as in_progress FROM user_skill_progress WHERE user_id = ? AND is_completed = 0 AND sessions_passed > 0`,
+    [userId]
+  );
+  
+  // Get subjects with their progress
+  const subjectsInProgress = await db.getAllAsync<{
+    id: string;
+    name: string;
+    image_url: string | null;
+    total_skills: number;
+    completed_skills: number;
+    in_progress_skills: number;
+    total_stars: number;
+  }>(
+    `SELECT 
+      s.id, 
+      s.name, 
+      s.image_url,
+      COUNT(DISTINCT sk.id) as total_skills,
+      SUM(CASE WHEN usp.is_completed = 1 THEN 1 ELSE 0 END) as completed_skills,
+      SUM(CASE WHEN usp.is_completed = 0 AND usp.sessions_passed > 0 THEN 1 ELSE 0 END) as in_progress_skills,
+      SUM(COALESCE(usp.stars_earned, 0)) as total_stars
+     FROM subjects s
+     INNER JOIN user_subjects us ON s.id = us.subject_id
+     LEFT JOIN skills sk ON sk.subject_id = s.id
+     LEFT JOIN user_skill_progress usp ON usp.skill_id = sk.id AND usp.user_id = ?
+     WHERE us.user_id = ?
+     GROUP BY s.id, s.name, s.image_url
+     ORDER BY total_stars DESC`,
+    [userId, userId]
+  );
+  
+  // Get recent session logs (last 5)
+  const recentSessions = await db.getAllAsync<{
+    skill_name: string;
+    subject_name: string;
+    score: number;
+    passed: number;
+    created_at: string;
+  }>(
+    `SELECT 
+      sk.name as skill_name,
+      s.name as subject_name,
+      usl.score,
+      usl.passed,
+      usl.created_at
+     FROM user_session_logs usl
+     INNER JOIN skills sk ON usl.skill_id = sk.id
+     INNER JOIN subjects s ON sk.subject_id = s.id
+     WHERE usl.user_id = ?
+     ORDER BY usl.created_at DESC
+     LIMIT 5`,
+    [userId]
+  );
+  
+  return {
+    totalStars: starsResult?.total_stars || 0,
+    completedLevels: completedResult?.completed || 0,
+    inProgressLevels: inProgressResult?.in_progress || 0,
+    subjectsInProgress,
+    recentSessions
+  };
+};
+
+// Get next recommended skill for a user
+export const getNextRecommendedSkill = async (userId: string) => {
+  const db = await openDB();
+  
+  // Find the first skill that's not completed, ordered by sessions_passed (prioritize in-progress)
+  const nextSkill = await db.getFirstAsync<{
+    skill_id: string;
+    skill_name: string;
+    subject_id: string;
+    subject_name: string;
+    sessions_passed: number;
+    last_unlocked_session: number;
+  }>(
+    `SELECT 
+      sk.id as skill_id,
+      sk.name as skill_name,
+      s.id as subject_id,
+      s.name as subject_name,
+      COALESCE(usp.sessions_passed, 0) as sessions_passed,
+      COALESCE(usp.last_unlocked_session, 1) as last_unlocked_session
+     FROM skills sk
+     INNER JOIN subjects s ON sk.subject_id = s.id
+     INNER JOIN user_subjects us ON s.id = us.subject_id
+     LEFT JOIN user_skill_progress usp ON usp.skill_id = sk.id AND usp.user_id = ?
+     WHERE us.user_id = ? AND (usp.is_completed IS NULL OR usp.is_completed = 0)
+     ORDER BY COALESCE(usp.sessions_passed, 0) DESC, sk.id ASC
+     LIMIT 1`,
+    [userId, userId]
+  );
+  
+  return nextSkill;
 };
 
 // Utils

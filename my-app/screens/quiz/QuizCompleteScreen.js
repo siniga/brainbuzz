@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
     View,
     StyleSheet,
@@ -8,18 +8,20 @@ import {
     TouchableOpacity,
     Image,
     BackHandler,
-    Alert
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { Audio } from 'expo-av';
 import LottieView from 'lottie-react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import ExitModal from '../../components/ExitModal';
 
 const MAIN_BG = require("../../assets/screens/main_bg.png");
 const PANEL_BG = require("../../assets/screens/quiz/session_complete/complete_main_panel.png");
 const BANNER_IMG = require("../../assets/screens/quiz/session_complete/complete_main_banner.png");
 
 export default function QuizComleteScreen({ route, navigation }) {
+    const [showExitModal, setShowExitModal] = useState(false);
     const {
         score,
         totalQuestions,
@@ -39,34 +41,26 @@ export default function QuizComleteScreen({ route, navigation }) {
     const percentage = (validScore / validTotal) * 100;
     const isPass = percentage >= 50;
 
-    // Handle Hardware Back Button
-    useEffect(() => {
-        const backAction = () => {
-            Alert.alert("Exit", "Where would you like to go?", [
-                {
-                    text: "Stay Here",
-                    onPress: () => null,
-                    style: "cancel"
-                },
-                {
-                    text: "Go to Home",
-                    onPress: () => navigation.navigate("SkillsTopic", { subjectId, subjectName, level })
-                },
-                {
-                    text: "Exit App",
-                    onPress: () => BackHandler.exitApp()
-                }
-            ]);
-            return true;
-        };
+    // Handle Hardware Back Button - only when screen is focused
+    useFocusEffect(
+        React.useCallback(() => {
+            const backAction = () => {
+                setShowExitModal(true);
+                return true;
+            };
 
-        const backHandler = BackHandler.addEventListener(
-            "hardwareBackPress",
-            backAction
-        );
+            const backHandler = BackHandler.addEventListener(
+                "hardwareBackPress",
+                backAction
+            );
 
-        return () => backHandler.remove();
-    }, [navigation, subjectId, subjectName, level]);
+            // Cleanup when screen loses focus or unmounts
+            return () => {
+                setShowExitModal(false); // Reset modal state
+                backHandler.remove();
+            };
+        }, [])
+    );
 
     // Play Sound Effect
     useEffect(() => {
@@ -236,6 +230,23 @@ export default function QuizComleteScreen({ route, navigation }) {
                     </View>
                 </ImageBackground>
             </SafeAreaView>
+
+            <ExitModal
+                visible={showExitModal}
+                onClose={() => setShowExitModal(false)}
+                onGoHome={() => {
+                    setShowExitModal(false);
+                    navigation.navigate("SubjectSelection");
+                }}
+                onGoSkills={() => {
+                    setShowExitModal(false);
+                    navigation.navigate("SkillsTopic", { subjectId, subjectName, level });
+                }}
+                onExitApp={() => {
+                    setShowExitModal(false);
+                    BackHandler.exitApp();
+                }}
+            />
         </ImageBackground>
     );
 }

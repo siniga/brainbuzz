@@ -91,6 +91,16 @@ export default function ProfileScreen({ navigation }) {
                     </View>
 
                     <TouchableOpacity 
+                        style={styles.reportButton}
+                        onPress={() => navigation.navigate('ParentDashboard')}
+                    >
+                        <LinearGradient colors={['#4A90E2', '#357ABD']} style={styles.editGradient}>
+                            <Ionicons name="stats-chart" size={20} color="#FFF" />
+                            <Text style={styles.editButtonText}>Progress Reports</Text>
+                        </LinearGradient>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity 
                         style={styles.editButton}
                         onPress={() => {}}
                     >
@@ -222,9 +232,20 @@ const styles = StyleSheet.create({
         color: '#555',
         marginLeft: 15,
     },
-    editButton: {
+    reportButton: {
         width: '100%',
         marginTop: 30,
+        borderRadius: 30,
+        overflow: 'hidden',
+        elevation: 5,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 3,
+    },
+    editButton: {
+        width: '100%',
+        marginTop: 15,
         borderRadius: 30,
         overflow: 'hidden',
         elevation: 5,
